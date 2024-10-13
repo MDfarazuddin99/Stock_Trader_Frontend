@@ -26,27 +26,28 @@ export default function Home() {
     useScrollToBottom<HTMLDivElement>();
 
   const suggestedActions = [
-    { title: "View all", label: "my cameras", action: "View all my cameras" },
     {
       title: "Show me",
-      label: "my smart home hub",
-      action: "Show me my smart home hub",
+      label: "my previous trade history",
+      action: "Show me trade my history",
     },
     {
-      title: "How much",
-      label: "electricity have I used this month?",
-      action: "Show electricity usage",
-    },
-    {
-      title: "How much",
-      label: "water have I used this month?",
-      action: "Show water usage",
+      title: "Get Me",
+      label: "current stock value of TSLA",
+      action: "Get stock information TSLA",
     },
   ];
 
   return (
     <main className="bg-background text-foreground">
-      {/* <DarkModeToggle /> */}
+      <div className="flex flex-row">
+        <div className="flex flex-row w-full items-center justify-center mr-auto">
+          <h1 className="scroll-m-20 text-4xl font-extrabold tracking-tight lg:text-5xl">
+            SellScaleHood
+          </h1>
+        </div>
+        <DarkModeToggle />
+      </div>
       <ResizablePanelGroup
         direction="horizontal"
         className="min-h-[100vh] rounded-lg border"
@@ -85,7 +86,6 @@ export default function Home() {
                           <MasonryIcon /> */}
                           AI Chat Assistant
                         </p>
-
                       </div>
                     </motion.div>
                   )}

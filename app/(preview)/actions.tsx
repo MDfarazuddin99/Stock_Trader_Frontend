@@ -9,27 +9,25 @@ import {
 } from "ai/rsc";
 import { ReactNode } from "react";
 import { z } from "zod";
-import { CameraView } from "@/components/camera-view";
-import { HubView } from "@/components/hub-view";
-import { UsageView } from "@/components/usage-view";
+import { StockInfoView } from "@/components/stock-info-view";
+import { TradeHistoryView } from "@/components/trade-history-view";
 
-export interface Hub {
-  climate: Record<"low" | "high", number>;
-  lights: Array<{ name: string; status: boolean }>;
-  locks: Array<{ name: string; isLocked: boolean }>;
-}
+// Function to fetch stock price
+const fetchStockPrice = async (symbol: string) => {
+  const response = await fetch(`http://127.0.0.1:5000/api/stock-price?symbol=${symbol}`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch stock price');
+  }
+  return response.json();
+};
 
-let hub: Hub = {
-  climate: {
-    low: 23,
-    high: 25,
-  },
-  lights: [
-    { name: "patio", status: true },
-    { name: "kitchen", status: false },
-    { name: "garage", status: true },
-  ],
-  locks: [{ name: "back door", isLocked: true }],
+// Function to fetch trade history
+const fetchTradeHistory = async () => {
+  const response = await fetch('http://127.0.0.1:5000/api/trade-history');
+  if (!response.ok) {
+    throw new Error('Failed to fetch trade history');
+  }
+  return response.json();
 };
 
 const sendMessage = async (message: string) => {
@@ -48,7 +46,7 @@ const sendMessage = async (message: string) => {
   const { value: stream } = await streamUI({
     model: openai("gpt-4o"),
     system: `\
-      - you are a friendly home automation assistant
+      - you are a friendly assistant that provides information about stock prices and trade history
       - reply in lower case
     `,
     messages: messages.get() as CoreMessage[],
@@ -67,163 +65,90 @@ const sendMessage = async (message: string) => {
       return textComponent;
     },
     tools: {
-      viewCameras: {
-        description: "view current active cameras",
+      searchStockPrice: {
+        description: "search for a stock price and display basic information",
+        parameters: z.object({
+          symbol: z.string().describe("The stock symbol to search for"),
+        }),
+        generate: async function* ({ symbol }) {
+          const toolCallId = generateId();
+
+          try {
+            const stockInfo = await fetchStockPrice(symbol);
+
+            messages.done([
+              ...(messages.get() as CoreMessage[]),
+              {
+                role: "assistant",
+                content: [
+                  {
+                    type: "tool-call",
+                    toolCallId,
+                    toolName: "searchStockPrice",
+                    args: { symbol },
+                  },
+                ],
+              },
+              {
+                role: "tool",
+                content: [
+                  {
+                    type: "tool-result",
+                    toolName: "searchStockPrice",
+                    toolCallId,
+                    result: `Stock information for ${symbol} has been fetched and is displayed on the screen`,
+                  },
+                ],
+              },
+            ]);
+
+            return <Message role="assistant" content={<StockInfoView stockInfo={stockInfo} />} />;
+          } catch (error) {
+            console.error('Error fetching stock price:', error);
+            return <Message role="assistant" content="Sorry, I couldn't fetch the stock information at the moment. Please try again later." />;
+          }
+        },
+      },
+      viewTradeHistory: {
+        description: "view the history of trades",
         parameters: z.object({}),
         generate: async function* ({}) {
           const toolCallId = generateId();
 
-          messages.done([
-            ...(messages.get() as CoreMessage[]),
-            {
-              role: "assistant",
-              content: [
-                {
-                  type: "tool-call",
-                  toolCallId,
-                  toolName: "viewCameras",
-                  args: {},
-                },
-              ],
-            },
-            {
-              role: "tool",
-              content: [
-                {
-                  type: "tool-result",
-                  toolName: "viewCameras",
-                  toolCallId,
-                  result: `The active cameras are currently displayed on the screen`,
-                },
-              ],
-            },
-          ]);
+          try {
+            const tradeHistory = await fetchTradeHistory();
 
-          return <Message role="assistant" content={<CameraView />} />;
-        },
-      },
-      viewHub: {
-        description:
-          "view the hub that contains current quick summary and actions for temperature, lights, and locks",
-        parameters: z.object({}),
-        generate: async function* ({}) {
-          const toolCallId = generateId();
+            messages.done([
+              ...(messages.get() as CoreMessage[]),
+              {
+                role: "assistant",
+                content: [
+                  {
+                    type: "tool-call",
+                    toolCallId,
+                    toolName: "viewTradeHistory",
+                    args: {},
+                  },
+                ],
+              },
+              {
+                role: "tool",
+                content: [
+                  {
+                    type: "tool-result",
+                    toolName: "viewTradeHistory",
+                    toolCallId,
+                    result: `Trade history has been fetched and is displayed on the screen`,
+                  },
+                ],
+              },
+            ]);
 
-          messages.done([
-            ...(messages.get() as CoreMessage[]),
-            {
-              role: "assistant",
-              content: [
-                {
-                  type: "tool-call",
-                  toolCallId,
-                  toolName: "viewHub",
-                  args: {},
-                },
-              ],
-            },
-            {
-              role: "tool",
-              content: [
-                {
-                  type: "tool-result",
-                  toolName: "viewHub",
-                  toolCallId,
-                  result: hub,
-                },
-              ],
-            },
-          ]);
-
-          return <Message role="assistant" content={<HubView hub={hub} />} />;
-        },
-      },
-      updateHub: {
-        description: "update the hub with new values",
-        parameters: z.object({
-          hub: z.object({
-            climate: z.object({
-              low: z.number(),
-              high: z.number(),
-            }),
-            lights: z.array(
-              z.object({ name: z.string(), status: z.boolean() }),
-            ),
-            locks: z.array(
-              z.object({ name: z.string(), isLocked: z.boolean() }),
-            ),
-          }),
-        }),
-        generate: async function* ({ hub: newHub }) {
-          hub = newHub;
-          const toolCallId = generateId();
-
-          messages.done([
-            ...(messages.get() as CoreMessage[]),
-            {
-              role: "assistant",
-              content: [
-                {
-                  type: "tool-call",
-                  toolCallId,
-                  toolName: "updateHub",
-                  args: { hub },
-                },
-              ],
-            },
-            {
-              role: "tool",
-              content: [
-                {
-                  type: "tool-result",
-                  toolName: "updateHub",
-                  toolCallId,
-                  result: `The hub has been updated with the new values`,
-                },
-              ],
-            },
-          ]);
-
-          return <Message role="assistant" content={<HubView hub={hub} />} />;
-        },
-      },
-      viewUsage: {
-        description: "view current usage for electricity, water, or gas",
-        parameters: z.object({
-          type: z.enum(["electricity", "water", "gas"]),
-        }),
-        generate: async function* ({ type }) {
-          const toolCallId = generateId();
-
-          messages.done([
-            ...(messages.get() as CoreMessage[]),
-            {
-              role: "assistant",
-              content: [
-                {
-                  type: "tool-call",
-                  toolCallId,
-                  toolName: "viewUsage",
-                  args: { type },
-                },
-              ],
-            },
-            {
-              role: "tool",
-              content: [
-                {
-                  type: "tool-result",
-                  toolName: "viewUsage",
-                  toolCallId,
-                  result: `The current usage for ${type} is currently displayed on the screen`,
-                },
-              ],
-            },
-          ]);
-
-          return (
-            <Message role="assistant" content={<UsageView type={type} />} />
-          );
+            return <Message role="assistant" content={<TradeHistoryView trades={tradeHistory} />} />;
+          } catch (error) {
+            console.error('Error fetching trade history:', error);
+            return <Message role="assistant" content="Sorry, I couldn't fetch the trade history at the moment. Please try again later." />;
+          }
         },
       },
     },
